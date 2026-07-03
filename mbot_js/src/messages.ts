@@ -64,6 +64,11 @@ export class OdometryMessage {
   get y(): number { return this.pose.pose.position.y; }
   get z(): number { return this.pose.pose.position.z; }
 
+  get theta(): number {
+    const q = this.pose.pose.orientation;
+    return Math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+  }
+
   get tx(): number { return this.twist.twist.linear.x; }
   get ty(): number { return this.twist.twist.linear.y; }
   get tz(): number { return this.twist.twist.linear.z; }
@@ -93,5 +98,25 @@ export class OccupancyGridMessage {
       return -1;
     }
     return this.data[y * this.info.width + x];
+  }
+}
+
+export class PoseStampedMessage {
+  header: ROSHeader;
+  pose: Pose;
+
+  constructor(msg: any) {
+    this.header = msg.header;
+    this.pose = msg.pose;
+  }
+}
+
+export class PathMessage {
+  header: ROSHeader;
+  poses: PoseStampedMessage[];
+
+  constructor(msg: any) {
+    this.header = msg.header;
+    this.poses = (msg.poses || []).map((p: any) => new PoseStampedMessage(p));
   }
 }

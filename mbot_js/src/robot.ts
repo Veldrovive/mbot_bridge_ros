@@ -1,5 +1,5 @@
-import { Ros, Topic, Service, Vector3 } from 'roslib';
-import { LaserScanMessage, OdometryMessage, OccupancyGridMessage, ROSTwist } from './messages';
+import { Ros, Topic, Service, Vector3, ActionClient, Goal } from 'roslib';
+import { LaserScanMessage, OdometryMessage, OccupancyGridMessage, ROSTwist, PathMessage, PoseStampedMessage } from './messages';
 
 /**
  * MBot class provides methods to interact with the MBot via ROSBridge using roslibjs.
@@ -13,8 +13,10 @@ class MBot {
     odom: Topic<OdometryMessage>;
     scan: Topic<LaserScanMessage>;
     map: Topic<OccupancyGridMessage>;
+    plan: Topic<PathMessage>;
   };
-  standardServices: Record<string, Service<any, any>>;
+  standardServices: Record<string, (msg: any) => Promise<any>>;
+  standardActionClients: Record<string, ActionClient>;
   standardPublishers: {
     cmd_vel: (msg: ROSTwist) => void;
   };
@@ -48,9 +50,13 @@ class MBot {
     this.standardSubscribers = {
       odom: this.registerSubscriber<OdometryMessage>('/odom', 'nav_msgs/Odometry'),
       scan: this.registerSubscriber<LaserScanMessage>('/scan', 'sensor_msgs/LaserScan'),
-      map: this.registerSubscriber<OccupancyGridMessage>('/map', 'nav_msgs/OccupancyGrid')
+      map: this.registerSubscriber<OccupancyGridMessage>('/map', 'nav_msgs/OccupancyGrid'),
+      plan: this.registerSubscriber<PathMessage>('/plan', 'nav_msgs/Path')
     };
-    this.standardServices = {};
+    this.standardServices = {
+      reset_slam: this.createService<{pause_new_measurements: boolean}, any>('/slam_toolbox/reset', 'slam_toolbox/srv/Reset')
+    };
+    this.standardActionClients = {};
 
     // Construct basic publishers
     this.standardPublishers = {
@@ -129,6 +135,20 @@ class MBot {
   }
 
   /**
+   * Creates a ROS Action client.
+   * @param {string} serverName - The name of the action server.
+   * @param {string} actionName - The ROS action type.
+   * @returns {ActionClient} The ActionClient instance.
+   */
+  createActionClient(serverName: string, actionName: string): ActionClient {
+    return new ActionClient({
+      ros: this.ros,
+      serverName: serverName,
+      actionName: actionName
+    });
+  }
+
+  /**
    * Drives the MBot using linear and angular velocities.
    * @param {number} vx - Linear velocity in the x-axis (m/s).
    * @param {number} vy - Linear velocity in the y-axis (m/s).
@@ -200,6 +220,63 @@ class MBot {
     return () => {
       this.standardSubscribers["map"].unsubscribe(wrappedCallback);
     };
+  }
+
+  /**
+   * Subscribes to the /plan topic.
+   * @param {function(PathMessage): void} callback - The callback function to execute when a path message is received.
+   * @returns {Function} A function to unsubscribe the callback.
+   */
+  readPath(callback: (msg: PathMessage) => void): () => void {
+    const wrappedCallback = (msg: any) => {
+      callback(new PathMessage(msg));
+    };
+    this.standardSubscribers["plan"].subscribe(wrappedCallback);
+    return () => {
+      this.standardSubscribers["plan"].unsubscribe(wrappedCallback);
+    };
+  }
+
+  /**
+   * Calls the /slam_toolbox/reset service to reset the SLAM map.
+   * @param {boolean} pauseNewMeasurements - Whether to pause new measurements after reset.
+   * @returns {Promise<any>} A promise that resolves when the service call completes.
+   */
+  resetSlam(pauseNewMeasurements: boolean = false): Promise<any> {
+    return this.standardServices["reset_slam"]({ pause_new_measurements: pauseNewMeasurements });
+  }
+
+  /**
+   * Follows a list of waypoints using the /follow_waypoints action server.
+   * @param {PoseStampedMessage[]} poses - An array of PoseStampedMessage representing the waypoints.
+   * @returns {Promise<any>} A promise that resolves when the goal is achieved or rejects on failure.
+   */
+  followWaypoints(poses: PoseStampedMessage[]): Promise<any> {
+    if (!this.connected) {
+      console.warn(`Attempting to call action /follow_waypoints before ROSBridge connection is established.`);
+    }
+
+    if (!this.standardActionClients["follow_waypoints"]) {
+      this.standardActionClients["follow_waypoints"] = this.createActionClient('/follow_waypoints', 'nav2_msgs/action/FollowWaypoints');
+    }
+
+    const actionClient = this.standardActionClients["follow_waypoints"];
+    const goal = new Goal({
+      actionClient: actionClient,
+      goalMessage: {
+        poses: poses
+      }
+    });
+
+    return new Promise((resolve, reject) => {
+      goal.on('result', (result: any) => {
+        resolve(result);
+      });
+      goal.on('timeout', () => {
+        reject(new Error('Action goal timed out'));
+      });
+      goal.send();
+    });
   }
 }
 
