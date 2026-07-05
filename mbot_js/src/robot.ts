@@ -20,6 +20,9 @@ class MBot {
   standardPublishers: {
     cmd_vel: (msg: ROSTwist) => void;
   };
+  private currentDriveInterval: any = null;
+  private currentDriveResolver: ((completed: boolean) => void) | null = null;
+
 
   /**
    * Initializes the MBot connection to ROSBridge.
@@ -54,13 +57,13 @@ class MBot {
       plan: this.registerSubscriber<PathMessage>('/plan', 'nav_msgs/Path')
     };
     this.standardServices = {
-      reset_slam: this.createService<{pause_new_measurements: boolean}, any>('/slam_toolbox/reset', 'slam_toolbox/srv/Reset')
+      reset_slam: this.createService<{ pause_new_measurements: boolean }, any>('/slam_toolbox/reset', 'slam_toolbox/srv/Reset')
     };
     this.standardActionClients = {};
 
     // Construct basic publishers
     this.standardPublishers = {
-      cmd_vel: this.createPublisher<ROSTwist>('/mbot/cmd_vel', 'geometry_msgs/Twist')
+      cmd_vel: this.createPublisher<ROSTwist>('/cmd_vel', 'geometry_msgs/Twist')
     };
   }
 
@@ -82,6 +85,7 @@ class MBot {
       if (!this.connected) {
         console.warn(`Attempting to publish to ${topic} before ROSBridge connection is established.`);
       }
+      // console.log(`Publishing ${msg} to ${topic} with dtype ${dtype}`)
       publisher.publish(msg);
     };
   }
@@ -149,12 +153,12 @@ class MBot {
   }
 
   /**
-   * Drives the MBot using linear and angular velocities.
+   * Publishes a single velocity command.
    * @param {number} vx - Linear velocity in the x-axis (m/s).
    * @param {number} vy - Linear velocity in the y-axis (m/s).
    * @param {number} w - Angular velocity around the z-axis (rad/s).
    */
-  drive(vx: number, vy: number, w: number): void {
+  publishCmdVel(vx: number, vy: number, w: number): void {
     const publisher = this.standardPublishers["cmd_vel"];
     publisher({
       linear: new Vector3({
@@ -170,11 +174,66 @@ class MBot {
     });
   }
 
+  private cancelCurrentDrive(): void {
+    if (this.currentDriveInterval) {
+      clearInterval(this.currentDriveInterval);
+      this.currentDriveInterval = null;
+    }
+    if (this.currentDriveResolver) {
+      this.currentDriveResolver(false);
+      this.currentDriveResolver = null;
+    }
+  }
+
   /**
-   * Stops the MBot by publishing zero velocities.
+   * Drives the MBot continuously until stopped or interrupted by another drive command.
+   * @param {number} vx - Linear velocity in the x-axis (m/s).
+   * @param {number} vy - Linear velocity in the y-axis (m/s).
+   * @param {number} w - Angular velocity around the z-axis (rad/s).
+   */
+  driveForever(vx: number, vy: number, w: number): void {
+    this.cancelCurrentDrive();
+    this.publishCmdVel(vx, vy, w);
+    this.currentDriveInterval = setInterval(() => {
+      this.publishCmdVel(vx, vy, w);
+    }, 100);
+  }
+
+  /**
+   * Drives the MBot for a specified amount of time.
+   * @param {number} vx - Linear velocity in the x-axis (m/s).
+   * @param {number} vy - Linear velocity in the y-axis (m/s).
+   * @param {number} w - Angular velocity around the z-axis (rad/s).
+   * @param {number} timeMs - Duration to drive for in milliseconds.
+   * @returns {Promise<boolean>} A promise that resolves to true if the drive completed, or false if it was interrupted.
+   */
+  drive(vx: number, vy: number, w: number, timeMs: number): Promise<boolean> {
+    this.cancelCurrentDrive();
+    return new Promise((resolve) => {
+      this.currentDriveResolver = resolve;
+
+      this.publishCmdVel(vx, vy, w);
+      this.currentDriveInterval = setInterval(() => {
+        this.publishCmdVel(vx, vy, w);
+      }, 100);
+
+      setTimeout(() => {
+        if (this.currentDriveResolver === resolve) {
+          // If this is still the active drive command
+          this.currentDriveResolver = null;
+          this.stop();
+          resolve(true);
+        }
+      }, timeMs);
+    });
+  }
+
+  /**
+   * Stops the MBot by publishing zero velocities and cancels any active drive tasks.
    */
   stop(): void {
-    this.drive(0, 0, 0);
+    this.cancelCurrentDrive();
+    this.publishCmdVel(0, 0, 0);
   }
 
   /**

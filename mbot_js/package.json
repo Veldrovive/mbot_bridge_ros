@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:bridge": "tsx src/bridge_tester.ts"
   },
   "keywords": [],
   "author": "",
@@ -25,8 +26,10 @@
     "roslib": "^2.1.0"
   },
   "devDependencies": {
+    "@types/node": "^26.1.0",
     "@types/roslib": "^1.3.5",
     "tsup": "^8.5.1",
+    "tsx": "^4.23.0",
     "typescript": "^6.0.3"
   }
 }
