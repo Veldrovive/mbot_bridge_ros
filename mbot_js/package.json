@@ -13,8 +13,8 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:bridge": "tsx src/bridge_tester.ts"
   },
