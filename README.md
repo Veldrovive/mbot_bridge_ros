@@ -44,7 +44,7 @@ ros2 launch rosbridge_server rosbridge_websocket_launch.xml
 
 To run the ROS bridge automatically in the background, you can set it up as a systemd service using the provided files in the `services/` directory.
 
-1. Verify the `services/mbot_bridge_ros.service` file has the correct path in `ExecStart`. (The default assumes the repository is cloned to `/home/mbot/mbot_bridge_ros`).
+1. Verify the `services/mbot_bridge_ros.service` file has the correct path in `ExecStart`. (The default assumes this repository is the `mbot_bridge_ros` submodule of [mbot_omni_stack](https://github.com/Veldrovive/mbot_omni_stack), cloned to `/home/mbot/mbot_omni_stack/mbot_bridge_ros`.)
 
 2. Run the installation script:
    ```bash
