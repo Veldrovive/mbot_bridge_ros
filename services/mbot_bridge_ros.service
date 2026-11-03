@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=mbot
 # Adjust this path if you cloned the repository to a different location
-ExecStart=/home/mbot/mbot_bridge_ros/services/start_bridge.sh
+ExecStart=/home/mbot/mbot_omni_stack/mbot_bridge_ros/services/start_bridge.sh
 Restart=on-failure
 RestartSec=3
 

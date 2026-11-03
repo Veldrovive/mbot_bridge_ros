@@ -9,4 +9,4 @@ source /opt/ros/jazzy/setup.bash
 source "${WS_DIR}/install/setup.bash"
 
 # Launch the rosbridge server
-ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
